@@ -1,0 +1,455 @@
+#!/usr/bin/env python
+# coding: utf-8
+
+# # Analysing Covid-19 Dataset
+
+# In[59]:
+
+
+# !pip install folium
+# !pip install plotly
+
+
+# In[60]:
+
+
+conda install -c conda-forge folium 
+
+
+# In[61]:
+
+
+# imports
+import plotly.express as px
+import plotly.graph_objects as go
+import plotly.figure_factory as ff
+from plotly.subplots import make_subplots
+
+import folium
+
+
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+
+get_ipython().run_line_magic('matplotlib', 'inline')
+
+import math
+import random
+from datetime import timedelta
+
+import warnings
+warnings.filterwarnings('ignore')
+
+#color pallette
+cnf = '#393e46'
+dth = '#ff2e63'
+rec = '#21bf73'
+act = '#fe9801'
+
+
+# ## Dataset Preparation
+
+# In[62]:
+
+
+import plotly as py
+py.offline.init_notebook_mode(connected = True)
+
+
+# In[63]:
+
+
+import os
+
+
+# In[64]:
+
+
+try:
+    os.system("rm -rf Covid-19-Preprocessed-Dataset")
+except:
+    print('File does not exist')
+
+
+# In[65]:
+
+
+get_ipython().system('git clone https://github.com/laxmimerit/Covid-19-Preprocessed-Dataset.git')
+
+
+# In[66]:
+
+
+df = pd.read_csv('Covid-19-Preprocessed-Dataset/preprocessed/covid_19_data_cleaned.csv', parse_dates=['Date'])
+
+country_daywise = pd.read_csv('Covid-19-Preprocessed-Dataset/preprocessed/country_daywise.csv', parse_dates=['Date'])
+countywise = pd.read_csv('Covid-19-Preprocessed-Dataset/preprocessed/countrywise.csv')
+daywise = pd.read_csv('Covid-19-Preprocessed-Dataset/preprocessed/daywise.csv', parse_dates=['Date'])
+
+
+# In[67]:
+
+
+df['Province/State'] = df['Province/State'].fillna("")
+df.head()
+
+
+# In[68]:
+
+
+confirmed = df.groupby('Date').sum()['Confirmed'].reset_index()
+recovered = df.groupby('Date').sum()['Recovered'].reset_index()
+deaths = df.groupby('Date').sum()['Deaths'].reset_index()
+deaths.head()
+
+
+# In[69]:
+
+
+df.isnull().sum()
+
+
+# In[70]:
+
+
+df.info()
+
+
+# In[71]:
+
+
+df.query('Country == "US"')
+
+
+# ## Worldwide Total Confirmed, Recovered, and Deaths
+
+# In[72]:
+
+
+confirmed.tail()
+
+
+# In[73]:
+
+
+recovered.tail()
+
+
+# In[74]:
+
+
+deaths.tail()
+
+
+# In[75]:
+
+
+fig = go.Figure()
+fig.add_trace(go.Scatter(x = confirmed['Date'], y = confirmed['Confirmed'], mode = 'lines+markers', name = 'Confirmed', line = dict(color = "Orange", width = 2)))
+fig.add_trace(go.Scatter(x = recovered['Date'], y = recovered['Recovered'], mode = 'lines+markers', name = 'Recovered', line = dict(color = "Green", width = 2)))
+fig.add_trace(go.Scatter(x = deaths['Date'], y = deaths['Deaths'], mode = 'lines+markers', name = 'Deaths', line = dict(color = "Red", width = 2)))
+fig.update_layout(title = 'Worldwide Covid-19 Cases', xaxis_tickfont_size = 14, yaxis = dict(title = 'Number of Cases'))
+
+fig.show()
+
+
+# ## Cases Density Animation on World Map
+
+# In[76]:
+
+
+df.info()
+
+
+# In[77]:
+
+
+df['Date'] = df['Date'].astype(str)
+
+
+# In[78]:
+
+
+df.info()
+
+
+# In[79]:
+
+
+df.head()
+
+
+# In[80]:
+
+
+fig = px.density_mapbox(df, lat = 'Lat', lon = 'Long', hover_name = 'Country', hover_data = ['Confirmed', 'Recovered', 'Deaths'], animation_frame='Date', color_continuous_scale='Portland', radius = 7, zoom = 0, height= 700)
+fig.update_layout(title = 'Worldwide Covid-19 Cases with Time Lapse')
+fig.update_layout(mapbox_style = 'open-street-map', mapbox_center_lon = 0)
+
+
+fig.show()
+
+
+# ## Total cases on ships
+
+# In[81]:
+
+
+df['Date'] = pd.to_datetime(df['Date'])
+df.info()
+
+
+# In[82]:
+
+
+# Ships
+# =====================
+
+ship_rows = df['Province/State'].str.contains('Grand Princess') | df['Province/State'].str.contains('Diamond Princess') | df['Country'].str.contains('Grand Princess') | df['Country'].str.contains('Diamond Princess') | df['Country'].str.contains('MS Zaandam')
+ship = df[ship_rows]
+
+df = df[~ship_rows]
+
+
+# In[83]:
+
+
+ship_latest = ship[ship['Date'] == max(ship['Date'])]
+ship_latest
+
+
+# In[84]:
+
+
+ship_latest.style.background_gradient(cmap = 'Pastel1_r')
+
+
+# ## Cases Over the Time with Area Plot
+
+# In[85]:
+
+
+temp = df.groupby('Date')['Confirmed', 'Deaths', 'Recovered', 'Active'].sum().reset_index()
+temp = temp[temp['Date']==max(temp['Date'])].reset_index(drop = True)
+
+tm = temp.melt(id_vars = 'Date', value_vars = ['Active', 'Deaths', 'Recovered'])
+fig = px.treemap(tm, path = ['variable'], values = 'value', height = 250, width = 800, color_discrete_sequence=[act, rec, dth])
+
+fig.data[0].textinfo = 'label+text+value'
+fig.show()
+
+
+# In[86]:
+
+
+temp = df.groupby('Date')['Recovered', 'Deaths', 'Active'].sum().reset_index()
+temp = temp.melt(id_vars = 'Date', value_vars = ['Recovered', 'Deaths', 'Active'], var_name = 'Case', value_name = 'Count')
+
+fig = px.area(temp, x = 'Date', y = 'Count', color= 'Case', height = 400, title = 'Cases over time', color_discrete_sequence=[rec, dth,  act])
+fig.update_layout(xaxis_rangeslider_visible=True)
+fig.show()
+
+
+# ## Folium Maps
+
+# In[87]:
+
+
+temp = df[df['Date']==max(df['Date'])]
+
+m = folium.Map(location=[0, 0], tiles='cartodbpositron', min_zoom = 1, max_zoom=4, zoom_start=1)
+
+for i in range(0, len(temp)):
+    folium.Circle(location=[temp.iloc[i]['Lat'], temp.iloc[i]['Long']], color = 'crimson', fill = 'crimson',
+                 tooltip = '<li><bold> Country: ' + str(temp.iloc[i]['Country'])+
+                            '<li><bold> Province: ' + str(temp.iloc[i]['Province/State'])+
+                             '<li><bold> Confirmed: ' + str(temp.iloc[i]['Confirmed'])+
+                             '<li><bold> Deaths: ' + str(temp.iloc[i]['Deaths']),
+                 radius = int(temp.iloc[i]['Confirmed'])**0.5).add_to(m)
+    
+
+m
+
+
+# ## Confirmed Cases with Choropleth Map
+
+# In[88]:
+
+
+country_daywise.head()
+
+
+# In[89]:
+
+
+fig = px.choropleth(country_daywise, locations= 'Country', locationmode='country names', color = np.log(country_daywise['Confirmed']),
+                   hover_name = 'Country', animation_frame=country_daywise['Date'].dt.strftime('%Y-%m-%d'),
+                   title='Cases over time', color_continuous_scale=px.colors.sequential.Inferno)
+
+fig.update(layout_coloraxis_showscale = True)
+fig.show()
+
+
+# In[90]:
+
+
+fig = px.choropleth(country_daywise, locations= 'Country', locationmode='country names', color = country_daywise['Confirmed'],
+                   hover_name = 'Country', animation_frame=country_daywise['Date'].dt.strftime('%Y-%m-%d'),
+                   title='Cases over time', color_continuous_scale=px.colors.sequential.Inferno)
+
+fig.update(layout_coloraxis_showscale = True)
+fig.show()
+
+
+# ## New Cases and No. of Countries
+
+# In[91]:
+
+
+fig_c = px.bar(daywise, x = 'Date', y = 'Confirmed', color_discrete_sequence=[act])
+fig_d = px.bar(daywise, x = 'Date', y = 'No. of Countries', color_discrete_sequence=[dth])
+
+fig = make_subplots(rows = 1, cols = 2, shared_xaxes=False, horizontal_spacing=0.1,
+                   subplot_titles=('No. of New Cases per Day', 'No. of Countries'))
+
+fig.add_trace(fig_c['data'][0], row = 1, col = 1)
+fig.add_trace(fig_d['data'][0], row = 1, col = 2)
+
+fig.show()
+
+
+# ## Top 15 Countries Case Analysis
+
+# In[92]:
+
+
+countywise.columns
+
+
+# In[93]:
+
+
+top  = 15
+
+fig_c = px.bar(countywise.sort_values('Confirmed').tail(top), x = 'Confirmed', y = 'Country',
+              text = 'Confirmed', orientation='h', color_discrete_sequence=[act])
+fig_d = px.bar(countywise.sort_values('Deaths').tail(top), x = 'Deaths', y = 'Country',
+              text = 'Deaths', orientation='h', color_discrete_sequence=[dth])
+
+
+fig_a = px.bar(countywise.sort_values('Active').tail(top), x = 'Active', y = 'Country',
+              text = 'Active', orientation='h', color_discrete_sequence=['#434343'])
+fig_r = px.bar(countywise.sort_values('Recovered').tail(top), x = 'Recovered', y = 'Country',
+              text = 'Recovered', orientation='h', color_discrete_sequence=[rec])
+
+
+fig_dc = px.bar(countywise.sort_values('Deaths / 100 Cases').tail(top), x = 'Deaths / 100 Cases', y = 'Country',
+              text = 'Deaths / 100 Cases', orientation='h', color_discrete_sequence=['#f84351'])
+fig_rc = px.bar(countywise.sort_values('Recovered / 100 Cases').tail(top), x = 'Recovered / 100 Cases', y = 'Country',
+              text = 'Recovered / 100 Cases', orientation='h', color_discrete_sequence=['#a45398'])
+
+
+fig_nc = px.bar(countywise.sort_values('New Cases').tail(top), x = 'New Cases', y = 'Country',
+              text = 'New Cases', orientation='h', color_discrete_sequence=['#f04341'])
+temp = countywise[countywise['Population']>1000000]
+fig_p = px.bar(temp.sort_values('Cases / Million People').tail(top), x = 'Cases / Million People', y = 'Country',
+              text = 'Cases / Million People', orientation='h', color_discrete_sequence=['#b40398'])
+
+
+
+fig_wc = px.bar(countywise.sort_values('1 week change').tail(top), x = '1 week change', y = 'Country',
+              text = '1 week change', orientation='h', color_discrete_sequence=['#c04041'])
+temp = countywise[countywise['Confirmed']>100]
+fig_wi = px.bar(temp.sort_values('1 week % increase').tail(top), x = '1 week % increase', y = 'Country',
+              text = '1 week % increase', orientation='h', color_discrete_sequence=['#b00398'])
+
+
+fig = make_subplots(rows = 5, cols = 2, shared_xaxes=False, horizontal_spacing=0.2, 
+                    vertical_spacing=.05,
+                   subplot_titles=('Confirmed Cases', 'Deaths Reported', 'Recovered Cases', 'Active Cases',
+                                  'Deaths / 100 Cases', 'Recovered / 100 Cases',
+                                  'New Cases', 'Cases / Million People',
+                                  '1 week change', '1 week % increase'))
+
+fig.add_trace(fig_c['data'][0], row = 1, col = 1)
+fig.add_trace(fig_d['data'][0], row = 1, col = 2)
+
+fig.add_trace(fig_r['data'][0], row = 2, col = 1)
+fig.add_trace(fig_a['data'][0], row = 2, col = 2)
+
+fig.add_trace(fig_dc['data'][0], row = 3, col = 1)
+fig.add_trace(fig_rc['data'][0], row = 3, col = 2)
+
+fig.add_trace(fig_nc['data'][0], row = 4, col = 1)
+fig.add_trace(fig_p['data'][0], row = 4, col = 2)
+
+fig.add_trace(fig_wc['data'][0], row = 5, col = 1)
+fig.add_trace(fig_wi['data'][0], row = 5, col = 2)
+
+fig.update_layout(height = 3000)
+fig.show()
+
+
+# ## Scatter Plot for Deaths vs Confirmed Cases
+
+# In[94]:
+
+
+top = 15
+fig = px.scatter(countywise.sort_values('Deaths', ascending = False).head(top), 
+                x = 'Confirmed', y = 'Deaths', color = 'Country', size = 'Confirmed', height = 600,
+                text = 'Country', log_x = True, log_y = True, title='Deaths vs Confirmed Cases (Cases are on log10 scale)')
+
+fig.update_traces(textposition = 'top center')
+fig.update_layout(showlegend = False)
+fig.update_layout(xaxis_rangeslider_visible = True)
+fig.show()
+
+
+# In[95]:
+
+
+countywise.sort_values('Deaths', ascending = False).head(15)
+
+
+# ## First and Last Case Report Time
+
+# In[96]:
+
+
+first_date = df[df['Confirmed']>0]
+first_date = first_date.groupby('Country')['Date'].agg(['min']).reset_index()
+
+
+last_date = df.groupby(['Country', 'Date'])['Confirmed', 'Deaths', 'Recovered']
+last_date = last_date.sum().diff().reset_index()
+
+
+mask = (last_date['Country'] != last_date['Country'].shift(1))
+
+last_date.loc[mask, 'Confirmed'] = np.nan
+last_date.loc[mask, 'Deaths'] = np.nan
+last_date.loc[mask, 'Recovered'] = np.nan
+
+last_date = last_date[last_date['Confirmed']>0]
+last_date = last_date.groupby('Country')['Date'].agg(['max']).reset_index()
+
+
+first_last = pd.concat([first_date, last_date['max']], axis = 1)
+first_last['max'] = first_last['max'] + timedelta(days = 1)
+
+first_last['Days'] = first_last['max'] - first_last['min']
+first_last['Task'] = first_last['Country']
+
+first_last.columns = ['Country', 'Start', 'Finish', 'Days', 'Task']
+
+first_last = first_last.sort_values('Days')
+
+colors = ['#' + ''.join([random.choice('0123456789ABCDEF') for j in range(6)]) for i in range(len(first_last))]
+
+fig = ff.create_gantt(first_last, index_col = 'Country', colors = colors, show_colorbar = False,
+                     bar_width=0.2, showgrid_x = True, showgrid_y=True, height = 2500)
+
+fig.show()
+
